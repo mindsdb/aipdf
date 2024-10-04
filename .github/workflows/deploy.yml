@@ -19,7 +19,7 @@ jobs:
           python-version: ${{ vars.CI_PYTHON_VERSION }}
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          pip install .
           pip install setuptools wheel twine
       - name: Clean previous builds
         run: rm -rf dist/ build/ *.egg-info
