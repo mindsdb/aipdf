@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aipdf"
+authors = [
+    {name = "Jorge Torres", email = "support@mindsdb.com"},
+]
+description = "A tool to extract PDF files to markdown, or any other format using AI"
+readme = "README.md"
+requires-python = ">=3.7"
+keywords = ["pdf", "markdown", "ai", "conversion", "openai"]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "pdf2image",
+    "Pillow",
+    "requests",
+    "openai",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/aipdf"
+Repository = "https://github.com/yourusername/aipdf.git"
+
+[tool.setuptools_scm]
