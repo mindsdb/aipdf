@@ -1,4 +1,4 @@
-# AIPDF: Simple PDF Data Extraction with AI Vision Models
+# AIPDF: Simple PDF Data Extraction with Multimodal Models
 
 Screw traditional OCRs or heavy libraries to get data from PDFs, GenAI does a better job!
 
