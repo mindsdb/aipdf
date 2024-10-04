@@ -18,51 +18,53 @@ brew install poppler
 ## Quick Start
 
 
-```python
-import requests
-import io
-from aipdf.ocr import ocr
-
-# Your OpenAI API key   
-api_key = 'your_openai_api_key'
-# from url
-pdf_file = io.BytesIO(requests.get('https://arxiv.org/pdf/2410.02467').content)
-
-# extract markdown
-markdown_pages = ocr(pdf_file, api_key, prompt="get markdown format, extract tables and turn charts into tables")
-
-```
-
-We chose that you pass a file object, because that way it is flexible for you to use this with any type of file system, s3, localfiles, urls etc
-
 
 ```python
 from aipdf.ocr import ocr
-import io
 
 # Your OpenAI API key   
 api_key = 'your_openai_api_key'
 
 file = open('somepdf.pdf', 'rb')
-markdown_pages = ocr(file, api_key, prompt="extract json structure from this file, extract tables and turn charts into tables")
+markdown_pages = ocr(file, api_key, prompt="extract markdown, extract tables and turn charts into tables")
 
 ```
 
-## Customization
-
-You can easily customize the extraction process by providing a custom prompt:
-
-```python
-custom_prompt = "Extract a json of this document, including all tables from and charts."
-markdown_pages = ocr(pdf_file, api_key, prompt=custom_prompt)
-```
 ##  Ollama
 
 You can use with any ollama multi-modal models 
 
 ```python
-ocr(pdf_file, api_key='ollama', model="llama3.2", base_url= '[https://api.openai.com/v1](http://localhost:11434/v1)', prompt=DEFAULT_PROMPT)
+ocr(pdf_file, api_key='ollama', model="llama3.2", base_url= 'http://localhost:11434/v1', prompt=DEFAULT_PROMPT)
 ```
+## Any file system
+
+We chose that you pass a file object, because that way it is flexible for you to use this with any type of file system, s3, localfiles, urls etc
+
+### From url
+```python
+
+pdf_file = io.BytesIO(requests.get('https://arxiv.org/pdf/2410.02467').content)
+
+# extract markdown
+markdown_pages = ocr(pdf_file, api_key, prompt="extract tables and turn charts into tables, return each table in json")
+
+```
+### From S3
+
+```python
+
+s3 = boto3.client('s3', config=Config(signature_version='s3v4'),
+                  aws_access_key_id=access_token,
+                  aws_secret_access_key='', # Not needed for token-based auth
+                  aws_session_token=access_token)
+
+
+pdf_file = io.BytesIO(s3.get_object(Bucket=bucket_name, Key=object_key)['Body'].read())
+# extract markdown
+markdown_pages = ocr(pdf_file, api_key, prompt="extract tables and turn charts into tables, return each table in json")
+```
+
 
 ## Why AIPDF?
 
