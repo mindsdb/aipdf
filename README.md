@@ -1,4 +1,4 @@
-# AIPDF: Simple PDF Data Extraction with GPT-like Multimodal Models
+# AIPDF: Simple PDF OCR with GPT-like Multimodal Models
 
 Screw traditional OCRs or heavy libraries to get data from PDFs, GenAI does a better job!
 
