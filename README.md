@@ -43,17 +43,9 @@ import io
 # Your OpenAI API key   
 api_key = 'your_openai_api_key'
 
+file = open('somepdf.pdf', 'rb')
+markdown_pages = ocr(file, api_key, prompt="extract json structure from this file, extract tables and turn charts into tables")
 
-# Load your PDF file
-with open('somefile', 'rb') as file:
-    
-    
-    # Extract PDF content to Markdown
-    markdown_pages = ocr(file, api_key)
-    
-    #Print the extracted content
-    for i, page_content in enumerate(markdown_pages):
-        print(f"Page {i+1}:\n{page_content}\n")
 ```
 
 ## Customization
