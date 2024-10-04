@@ -68,9 +68,9 @@ pages = ocr(pdf_file, api_key, prompt="extract tables and turn charts into table
 
 ## Why AIPDF?
 
-1. **Simplicity**: AIPDF provides a straightforward API that requires minimal setup and configuration.
-2. **Flexibility**: Extract data into Markdown, which can be easily converted to other formats like JSON or HTML.
-3. **Power of AI**: Leverages state-of-the-art vision models for accurate and intelligent data extraction.
+1. **Simplicity**: AIPDF provides a straightforward function, it requires minimal setup, dependencies and configuration.
+2. **Flexibility**: Extract data into Markdown, JSON, HTML, YAML, whatever... file format and schema.
+3. **Power of AI**: Leverages state-of-the-art multi modal models (gpt, llama, ..).
 4. **Customizable**: Tailor the extraction process to your specific needs with custom prompts.
 5. **Efficient**: Utilizes parallel processing for faster extraction of multi-page PDFs.
 
