@@ -77,7 +77,6 @@ pages = ocr(pdf_file, api_key, prompt="extract tables and turn charts into table
 ## Requirements
 
 - Python 3.7+
-- OpenAI API key (or compatible vision model API)
 
 We will keep this super clean, only 3 required libraries:
 
