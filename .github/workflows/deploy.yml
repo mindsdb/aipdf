@@ -1,8 +1,9 @@
 name: Build and publish to PyPi
 
 on:
-  release:
-    types: [published]
+  pull_request:
+    branches:
+      - main
 
 jobs:
  #  Push a new release to PyPI

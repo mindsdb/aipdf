@@ -26,7 +26,7 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/aipdf"
-Repository = "https://github.com/yourusername/aipdf.git"
+Homepage = "https://github.com/mindsdb/aipdf"
+Repository = "https://github.com/mindsdb/aipdf.git"
 
 [tool.setuptools_scm]
