@@ -27,7 +27,7 @@ from aipdf.ocr import ocr
 # Your OpenAI API key   
 api_key = 'your_openai_api_key'
 # from url
-pdf_file = io.BytesIO(requests.get('https://www.hhs.gov/sites/default/files/pdf-tagging.pdf').content)
+pdf_file = io.BytesIO(requests.get('https://arxiv.org/pdf/2410.02467').content)
 
 # extract markdown
 markdown_pages = ocr(pdf_file, api_key, prompt="get markdown format, extract tables and turn charts into tables")
