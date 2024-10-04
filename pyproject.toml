@@ -25,6 +25,9 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[tool.setuptools.dynamic]
+version = {attr = "aipdf.__version__"}
+
 [project.urls]
 Homepage = "https://github.com/mindsdb/aipdf"
 Repository = "https://github.com/mindsdb/aipdf.git"
