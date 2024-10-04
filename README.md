@@ -2,7 +2,7 @@
 
 Screw traditional OCRs or heavy libraries to get data from PDFs, GenAI does a better job!
 
-AIPDF is a stand-alone, minimalistic, yet powerful pure Python library that leverages OpenAI's vision models (or compatible alternatives) to extract data from PDFs and convert it into various formats such as Markdown or JSON. 
+AIPDF is a stand-alone, minimalistic, yet powerful pure Python library that leverages OpenAI's multi-modal models (or compatible alternatives) to extract data from PDFs and convert it into various formats such as Markdown or JSON. 
 
 ## Installation
 
@@ -55,6 +55,11 @@ You can easily customize the extraction process by providing a custom prompt:
 ```python
 custom_prompt = "Extract a json of this document, including all tables from and charts."
 markdown_pages = ocr(pdf_file, api_key, prompt=custom_prompt)
+```
+You can use with any ollama multi-modal models 
+
+```python
+ocr(pdf_file, api_key='ollama', model="llama3.2", base_url= '[https://api.openai.com/v1](http://localhost:11434/v1)', prompt=DEFAULT_PROMPT)
 ```
 
 ## Why AIPDF?
