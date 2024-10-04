@@ -20,7 +20,7 @@ brew install poppler
 
 
 ```python
-from aipdf.ocr import ocr
+from aipdf import ocr
 
 # Your OpenAI API key   
 api_key = 'your_openai_api_key'
@@ -35,7 +35,7 @@ markdown_pages = ocr(file, api_key, prompt="extract markdown, extract tables and
 You can use with any ollama multi-modal models 
 
 ```python
-ocr(pdf_file, api_key='ollama', model="llama3.2", base_url= 'http://localhost:11434/v1', prompt=DEFAULT_PROMPT)
+ocr(pdf_file, api_key='ollama', model="llama3.2", base_url= 'http://localhost:11434/v1', prompt=...)
 ```
 ## Any file system
 
@@ -46,7 +46,7 @@ We chose that you pass a file object, because that way it is flexible for you to
 
 pdf_file = io.BytesIO(requests.get('https://arxiv.org/pdf/2410.02467').content)
 
-# extract markdown
+# extract
 pages = ocr(pdf_file, api_key, prompt="extract tables and turn charts into tables, return each table in json")
 
 ```
@@ -61,7 +61,7 @@ s3 = boto3.client('s3', config=Config(signature_version='s3v4'),
 
 
 pdf_file = io.BytesIO(s3.get_object(Bucket=bucket_name, Key=object_key)['Body'].read())
-# extract markdown
+# extract 
 pages = ocr(pdf_file, api_key, prompt="extract tables and turn charts into tables, return each table in json")
 ```
 
