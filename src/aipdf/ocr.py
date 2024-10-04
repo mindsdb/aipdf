@@ -13,13 +13,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 DEFAULT_PROMPT = "Please analyze this image and provide a markdown representation of its content. Include headings, lists, and any other relevant markdown formatting."
 
-def process_image_to_markdown(file_object, client, prompt = DEFAULT_PROMPT):
+def process_image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEFAULT_PROMPT):
     """
     Process a single image file and convert its content to markdown using OpenAI's API.
 
     Args:
         file_object (io.BytesIO): The image file object.
         client (OpenAI): The OpenAI client instance.
+        model (str, optional): by default is gpt-4o
         prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
 
     Returns:
@@ -30,7 +31,7 @@ def process_image_to_markdown(file_object, client, prompt = DEFAULT_PROMPT):
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[
                 {
                     "role": "user",
@@ -99,13 +100,14 @@ def pdf_to_image_files(pdf_file):
     return image_files
 
 
-def ocr(pdf_file, api_key, base_url= 'https://api.openai.com/v1', prompt=DEFAULT_PROMPT):
+def ocr(pdf_file, api_key, model="gpt-4o", base_url= 'https://api.openai.com/v1', prompt=DEFAULT_PROMPT):
     """
     Convert a PDF file to a list of markdown-formatted pages using OpenAI's API.
 
     Args:
         pdf_file (io.BytesIO): The PDF file object.
         api_key (str): The OpenAI API key.
+        model (str, optional): by default is gpt-4o
         base_url (str): You can use this one to point the client whereever you need it like Ollama
         prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
 
@@ -122,7 +124,7 @@ def ocr(pdf_file, api_key, base_url= 'https://api.openai.com/v1', prompt=DEFAULT
     # Process each image file in parallel
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Submit tasks for each image file
-        future_to_page = {executor.submit(process_image_to_markdown, img_file, client, prompt): i 
+        future_to_page = {executor.submit(process_image_to_markdown, img_file, client, model, prompt): i 
                           for i, img_file in enumerate(image_files)}
         
         # Collect results as they complete
