@@ -48,8 +48,7 @@ def process_image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEF
                         }
                     ]
                 }
-            ],
-            max_tokens=1000
+            ]
         )
         
         # Extract the markdown content from the response
