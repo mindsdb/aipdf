@@ -26,7 +26,7 @@ from aipdf import ocr
 api_key = 'your_openai_api_key'
 
 file = open('somepdf.pdf', 'rb')
-markdown_pages = ocr(file, api_key, prompt="extract markdown, extract tables and turn charts into tables")
+markdown_pages = ocr(file, api_key)
 
 ```
 
@@ -47,7 +47,7 @@ We chose that you pass a file object, because that way it is flexible for you to
 pdf_file = io.BytesIO(requests.get('https://arxiv.org/pdf/2410.02467').content)
 
 # extract
-pages = ocr(pdf_file, api_key, prompt="extract tables and turn charts into tables, return each table in json")
+pages = ocr(pdf_file, api_key, prompt="extract tables, return each table in json")
 
 ```
 ### From S3
@@ -62,7 +62,7 @@ s3 = boto3.client('s3', config=Config(signature_version='s3v4'),
 
 pdf_file = io.BytesIO(s3.get_object(Bucket=bucket_name, Key=object_key)['Body'].read())
 # extract 
-pages = ocr(pdf_file, api_key, prompt="extract tables and turn charts into tables, return each table in json")
+pages = ocr(pdf_file, api_key, prompt="extract charts data, turn it into tables that represent the variables in the chart")
 ```
 
 
