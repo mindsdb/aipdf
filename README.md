@@ -1,6 +1,4 @@
-# AIPDF: Simple PDF OCR with GPT-like Multimodal Models
-
-Screw traditional OCRs or heavy libraries to get data from PDFs, GenAI does a better job!
+# AIPDF: Minimalistic PDF to Markdown (and others), with GPT-like Multimodal Models
 
 AIPDF is a stand-alone, minimalistic, yet powerful pure Python library that leverages multi-modal gen AI models (OpenAI, llama3 or compatible alternatives) to extract data from PDFs and convert it into various formats such as Markdown or JSON. 
 
