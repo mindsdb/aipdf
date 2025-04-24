@@ -3,7 +3,7 @@ import base64
 import logging
 import concurrent.futures
 
-from pdf2image import convert_from_bytes
+import fitz
 from openai import OpenAI
 
 # Set up logging
@@ -79,33 +79,19 @@ def pdf_to_image_files(pdf_file):
     Returns:
         list: A list of io.BytesIO objects, each containing a page of the PDF as a PNG image.
     """
-    # Read the PDF file content
-    pdf_content = pdf_file.read()
+    zoom_x = 2.0  # Horizontal zoom.
+    zoom_y = 2.0  # Vertical zoom.
+    mat = fitz.Matrix(zoom_x, zoom_y)  # Zoom factor 2 in each dimension.
+
+    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
+
+    image_bytes = []
+    for page in doc:
+        pix = page.get_pixmap(matrix=mat)
+        img_bytes = pix.tobytes("png")
+        image_bytes.append(io.BytesIO(img_bytes))
     
-    # Convert PDF pages to images
-    images = convert_from_bytes(pdf_content)
-    
-    # List to store image file objects
-    image_files = []
-    
-    # Process each image
-    for i, image in enumerate(images):
-        # Create a byte stream to store the image
-        img_byte_arr = io.BytesIO()
-        
-        # Save the image as PNG to the byte stream
-        image.save(img_byte_arr, format='PNG')
-        
-        # Seek to the beginning of the stream
-        img_byte_arr.seek(0)
-        
-        # Create a file-like object and add it to the list
-        image_file = io.BytesIO(img_byte_arr.getvalue())
-        image_file.name = f"page_{i+1}.png"
-        image_files.append(image_file)
-        
-    
-    return image_files
+    return image_bytes
 
 
 def ocr(pdf_file, api_key, model="gpt-4o", base_url= 'https://api.openai.com/v1', prompt=DEFAULT_PROMPT, pages_list = None):

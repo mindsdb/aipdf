@@ -18,7 +18,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "pdf2image",
+    "PyMuPDF",
     "Pillow",
     "requests",
     "openai",

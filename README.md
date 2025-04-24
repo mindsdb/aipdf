@@ -8,14 +8,7 @@ AIPDF is a stand-alone, minimalistic, yet powerful pure Python library that leve
 pip install aipdf
 ```
 
-in macOS you will need to install poppler
-```bash
-brew install poppler 
-```
-
 ## Quick Start
-
-
 
 ```python
 from aipdf import ocr
@@ -79,7 +72,7 @@ pages = ocr(pdf_file, api_key, prompt="extract charts data, turn it into tables 
 We will keep this super clean, only 3 required libraries:
 
 - openai library to talk to completion endpoints
-- pdf2image library (for PDF to image conversion)
+- PyMuPDF library (for PDF to image conversion)
 - Pillow (PIL) library
 
 ## License
