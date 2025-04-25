@@ -1,6 +1,6 @@
 # AIPDF: Minimalistic PDF to Markdown (and others), with GPT-like Multimodal Models
 
-AIPDF is a stand-alone, minimalistic, yet powerful pure Python library that leverages multi-modal gen AI models (OpenAI, llama3 or compatible alternatives) to extract data from PDFs and convert it into various formats such as Markdown or JSON. 
+AIPDF is a stand-alone, minimalistic, yet powerful pure Python library that leverages multi-modal gen AI models (OpenAI, llama3 or compatible alternatives) to extract data from PDFs and convert it Markdown. 
 
 ## Installation
 
@@ -18,7 +18,12 @@ api_key = 'your_openai_api_key'
 
 file = open('somepdf.pdf', 'rb')
 markdown_pages = ocr(file, api_key)
+```
 
+By default, AIPDF attempts to determine which pages to send to the LLM based on their content and whether they can be processed using traditional text parsing. This is done to improve performance, and the behavior can be overridden by setting the `use_llm_for_all` parameter to `True`:
+
+```python
+markdown_pages = ocr(file, api_key, use_llm_for_all=True)
 ```
 
 ##  Ollama
@@ -60,10 +65,9 @@ pages = ocr(pdf_file, api_key, prompt="extract charts data, turn it into tables 
 ## Why AIPDF?
 
 1. **Simplicity**: AIPDF provides a straightforward function, it requires minimal setup, dependencies and configuration.
-2. **Flexibility**: Extract data into Markdown, JSON, HTML, YAML, whatever... file format and schema.
-3. **Power of AI**: Leverages state-of-the-art multi modal models (gpt, llama, ..).
-4. **Customizable**: Tailor the extraction process to your specific needs with custom prompts.
-5. **Efficient**: Utilizes parallel processing for faster extraction of multi-page PDFs.
+2. **Power of AI**: Leverages state-of-the-art multi modal models (gpt, llama, ..).
+3. **Customizable**: Tailor the extraction process to your specific needs with custom prompts.
+4. **Efficient**: Utilizes parallel processing for faster extraction of multi-page PDFs.
 
 ## Requirements
 
