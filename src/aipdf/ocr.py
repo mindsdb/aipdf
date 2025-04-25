@@ -172,7 +172,7 @@ def ocr(
     for page_num in pages_list:
         page = doc.load_page(page_num - 1)
         if not use_llm_for_all and not is_visual_page(page):
-            logging.info(f"Page {page.number + 1} will be extracted using traditional OCR because it does not contain visual content.")
+            logging.info(f"The content of Page {page.number + 1} will be extracted using text parsing.")
             # Extract text using traditional OCR
             markdown_content = page_to_markdown(page)
             if markdown_content:
@@ -182,7 +182,7 @@ def ocr(
                 markdown_pages[page_num - 1] = f"Page {page.number + 1} is empty or contains no text."
 
         else:
-            logging.info(f"Page {page.number + 1} will be passed through the LLM because it contains visual content.")
+            logging.info(f"The content of page {page.number + 1} will be extracted using the LLM.")
             # Convert page to image
             image_file = page_to_image(page)
             image_files.append(io.BytesIO(image_file))
