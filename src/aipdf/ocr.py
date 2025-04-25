@@ -168,7 +168,7 @@ def ocr(
     # List to store markdown content for each page
     markdown_pages = [None] * len(pages_list)
 
-    image_files = []
+    image_files = {}
     for page_num in pages_list:
         page = doc.load_page(page_num - 1)
         if not use_llm_for_all and not is_visual_page(page):
@@ -185,14 +185,14 @@ def ocr(
             logging.info(f"The content of page {page.number + 1} will be extracted using the LLM.")
             # Convert page to image
             image_file = page_to_image(page)
-            image_files.append(io.BytesIO(image_file))
+            image_files[page_num - 1] = io.BytesIO(image_file)
 
     if image_files:
         # Process each image file in parallel
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Submit tasks for each image file
-            future_to_page = {executor.submit(image_to_markdown, img_file, client, model, prompt): i 
-                            for i, img_file in enumerate(image_files)}
+            future_to_page = {executor.submit(image_to_markdown, img_file, client, model, prompt): page_num 
+                            for page_num, img_file in image_files.items()}
             
             # Collect results as they complete
             for future in concurrent.futures.as_completed(future_to_page):
