@@ -19,7 +19,7 @@ Extract the full markdown text from the given image, following these guidelines:
           
 """
 
-def process_image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEFAULT_PROMPT):
+def image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEFAULT_PROMPT):
     """
     Process a single image file and convert its content to markdown using OpenAI's API.
 
@@ -182,7 +182,7 @@ def ocr(pdf_file, api_key, model="gpt-4o", base_url= 'https://api.openai.com/v1'
         # Process each image file in parallel
         with concurrent.futures.ThreadPoolExecutor() as executor:
             # Submit tasks for each image file
-            future_to_page = {executor.submit(process_image_to_markdown, img_file, client, model, prompt): i 
+            future_to_page = {executor.submit(image_to_markdown, img_file, client, model, prompt): i 
                             for i, img_file in enumerate(image_files)}
             
             # Collect results as they complete
