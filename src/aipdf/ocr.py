@@ -67,31 +67,73 @@ def process_image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEF
     except Exception as e:
         logging.error(f"An error occurred while processing the image: {e}")
         return None
-
     
-def pdf_to_image_files(pdf_file):
+
+def is_visual_page(page):
     """
-    Convert a PDF file to a list of image file objects.
+    Check if a page contains visual content.
 
     Args:
-        pdf_file (io.BytesIO): The PDF file object.
+        page (fitz.Page): The page object to check.
 
     Returns:
-        list: A list of io.BytesIO objects, each containing a page of the PDF as a PNG image.
+        bool: True if the page contains visual content, False otherwise.
     """
-    zoom_x = 2.0  # Horizontal zoom.
-    zoom_y = 2.0  # Vertical zoom.
-    mat = fitz.Matrix(zoom_x, zoom_y)  # Zoom factor 2 in each dimension.
+    has_images = bool(page.get_images(full=True))
+    has_drawings = len(page.get_drawings()) > 20
+    has_text = bool(page.get_text().strip())
 
-    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
+    return has_images or has_drawings or not has_text
 
-    image_bytes = []
-    for page in doc:
-        pix = page.get_pixmap(matrix=mat)
-        img_bytes = pix.tobytes("png")
-        image_bytes.append(io.BytesIO(img_bytes))
     
-    return image_bytes
+def page_to_image(page):
+    """
+    Convert a page of a PDF file to an image file.
+
+    Args:
+        page (fitz.Page): The page object to convert.
+
+    Returns:
+        bytes: The image file in bytes.
+    """
+    zoom_x = 2.0  # Horizontal zoom
+    zoom_y = 2.0  # Vertical zoom
+    mat = fitz.Matrix(zoom_x, zoom_y)  # Zoom factor 2 in each dimension
+
+    pix = page.get_pixmap(matrix=mat)
+    return pix.tobytes("png")
+
+
+def page_to_markdown(page, gap_threshold=10):
+    """
+    Convert a page of a PDF file to markdown format.
+
+    Args:
+        page (fitz.Page): The page object to convert.
+        gap_threshold (int, optional): The threshold for vertical gaps between text blocks. Defaults to 10.
+
+    Returns:
+        str: The markdown representation of the page.
+    """
+    blocks = page.get_text("blocks")
+    blocks.sort(key=lambda block: (block[1], block[0]))
+
+    markdown_page = []
+    previous_block_bottom = 0
+
+    for block in blocks:
+        y0 = block[1]
+        y1 = block[3]
+        block_text = block[4]
+
+        # Check if there's a large vertical gap between this block and the previous one
+        if y0 - previous_block_bottom > gap_threshold:
+            markdown_page.append("")
+
+        markdown_page.append(block_text)
+        previous_block_bottom = y1
+
+    return "\n".join(markdown_page)
 
 
 def ocr(pdf_file, api_key, model="gpt-4o", base_url= 'https://api.openai.com/v1', prompt=DEFAULT_PROMPT, pages_list = None):
@@ -109,34 +151,52 @@ def ocr(pdf_file, api_key, model="gpt-4o", base_url= 'https://api.openai.com/v1'
         list: A list of strings, each containing the markdown representation of a PDF page.
     """
     client = OpenAI(api_key=api_key, base_url = base_url)  # Create OpenAI client
-    # Convert PDF to image files
-    image_files = pdf_to_image_files(pdf_file)
 
-    if pages_list:
-        # Filter image_files to only include pages in page_list
-        image_files = [img for i, img in enumerate(image_files) if i + 1 in pages_list]
-    
+    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
+
+    pages_list = pages_list or list(range(1, doc.page_count + 1))  # Default to all pages if not provided
+
     # List to store markdown content for each page
-    markdown_pages = [None] * len(image_files)
+    markdown_pages = [None] * len(pages_list)
 
-    # Process each image file in parallel
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Submit tasks for each image file
-        future_to_page = {executor.submit(process_image_to_markdown, img_file, client, model, prompt): i 
-                          for i, img_file in enumerate(image_files)}
-        
-        # Collect results as they complete
-        for future in concurrent.futures.as_completed(future_to_page):
-            page_num = future_to_page[future]
-            try:
-                markdown_content = future.result()
-                if markdown_content:
-                    markdown_pages[page_num] = markdown_content
-                else:
-                    markdown_pages[page_num] = f"Error processing page {page_num + 1}."
-            except Exception as e:
-                logging.error(f"Error processing page {page_num + 1}: {e}")
-                markdown_pages[page_num] = f"Error processing page {page_num + 1}: {str(e)}"
+    image_files = []
+    for page_num in pages_list:
+        page = doc.load_page(page_num - 1)
+        if not is_visual_page(page):
+            logging.info(f"Page {page.number + 1} will be extracted using traditional OCR because it does not contain visual content.")
+            # Extract text using traditional OCR
+            markdown_content = page_to_markdown(page)
+            if markdown_content:
+                markdown_pages[page_num - 1] = markdown_content
+            else:
+                logging.warning(f"Page {page.number + 1} is empty or contains no text.")
+                markdown_pages[page_num - 1] = f"Page {page.number + 1} is empty or contains no text."
+
+        else:
+            logging.info(f"Page {page.number + 1} will be passed through the LLM because it contains visual content.")
+            # Convert page to image
+            image_file = page_to_image(page)
+            image_files.append(io.BytesIO(image_file))
+
+    if image_files:
+        # Process each image file in parallel
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Submit tasks for each image file
+            future_to_page = {executor.submit(process_image_to_markdown, img_file, client, model, prompt): i 
+                            for i, img_file in enumerate(image_files)}
+            
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_page):
+                page_num = future_to_page[future]
+                try:
+                    markdown_content = future.result()
+                    if markdown_content:
+                        markdown_pages[page_num] = markdown_content
+                    else:
+                        markdown_pages[page_num] = f"Error processing page {page_num + 1}."
+                except Exception as e:
+                    logging.error(f"Error processing page {page_num + 1}: {e}")
+                    markdown_pages[page_num] = f"Error processing page {page_num + 1}: {str(e)}"
 
     return markdown_pages
 
