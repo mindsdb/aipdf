@@ -36,7 +36,7 @@ def image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEFAULT_PRO
     logging.info("About to process a page")
 
     base64_image = base64.b64encode(file_object.read()).decode('utf-8')
-    
+
     try:
         response = client.chat.completions.create(
             model=model,
@@ -58,16 +58,16 @@ def image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEFAULT_PRO
                 }
             ]
         )
-        
+
         # Extract the markdown content from the response
         markdown_content = response.choices[0].message.content
         logging.info("Page processed successfully")
         return markdown_content
-    
+
     except Exception as e:
         logging.error(f"An error occurred while processing the image: {e}")
         return None
-    
+
 
 def is_visual_page(page):
     """
@@ -85,7 +85,7 @@ def is_visual_page(page):
 
     return has_images or has_drawings or not has_text
 
-    
+
 def page_to_image(page):
     """
     Convert a page of a PDF file to an image file.
@@ -208,5 +208,3 @@ def ocr(
                     markdown_pages[page_num] = f"Error processing page {page_num + 1}: {str(e)}"
 
     return markdown_pages
-
-

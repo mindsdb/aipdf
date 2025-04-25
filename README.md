@@ -72,7 +72,7 @@ pages = ocr(pdf_file, api_key, prompt="extract charts data, turn it into tables 
 We will keep this super clean, only 3 required libraries:
 
 - openai library to talk to completion endpoints
-- PyMuPDF library (for PDF to image conversion)
+- PyMuPDF library for traditional text parsing and image conversion
 - Pillow (PIL) library
 
 ## License
