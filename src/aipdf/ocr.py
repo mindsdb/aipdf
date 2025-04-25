@@ -136,7 +136,15 @@ def page_to_markdown(page, gap_threshold=10):
     return "\n".join(markdown_page)
 
 
-def ocr(pdf_file, api_key, model="gpt-4o", base_url= 'https://api.openai.com/v1', prompt=DEFAULT_PROMPT, pages_list = None):
+def ocr(
+    pdf_file, 
+    api_key, 
+    model="gpt-4o", 
+    base_url= 'https://api.openai.com/v1', 
+    prompt=DEFAULT_PROMPT, 
+    pages_list = None,
+    use_llm_for_all = False,
+    ):
     """
     Convert a PDF file to a list of markdown-formatted pages using OpenAI's API.
 
@@ -147,6 +155,7 @@ def ocr(pdf_file, api_key, model="gpt-4o", base_url= 'https://api.openai.com/v1'
         base_url (str): You can use this one to point the client whereever you need it like Ollama
         prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
         pages_list (list, optional): A list of page numbers to process. If provided, only these pages will be converted. Defaults to None, which processes all pages.
+        use_llm_for_all (bool, optional): If True, all pages will be processed using the LLM, regardless of visual content. Defaults to False.
     Returns:
         list: A list of strings, each containing the markdown representation of a PDF page.
     """
@@ -162,7 +171,7 @@ def ocr(pdf_file, api_key, model="gpt-4o", base_url= 'https://api.openai.com/v1'
     image_files = []
     for page_num in pages_list:
         page = doc.load_page(page_num - 1)
-        if not is_visual_page(page):
+        if not use_llm_for_all and not is_visual_page(page):
             logging.info(f"Page {page.number + 1} will be extracted using traditional OCR because it does not contain visual content.")
             # Extract text using traditional OCR
             markdown_content = page_to_markdown(page)
