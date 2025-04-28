@@ -165,10 +165,11 @@ def ocr(
     pdf_file, 
     api_key, 
     model="gpt-4o", 
-    base_url= 'https://api.openai.com/v1', 
+    base_url='https://api.openai.com/v1', 
     prompt=DEFAULT_PROMPT, 
-    pages_list = None,
-    use_llm_for_all = False,
+    pages_list=None,
+    use_llm_for_all=False,
+    **kwargs
     ):
     """
     Convert a PDF file to a list of markdown-formatted pages using OpenAI's API.
@@ -181,10 +182,11 @@ def ocr(
         prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
         pages_list (list, optional): A list of page numbers to process. If provided, only these pages will be converted. Defaults to None, which processes all pages.
         use_llm_for_all (bool, optional): If True, all pages will be processed using the LLM, regardless of visual content. Defaults to False.
+        **kwargs: Additional keyword arguments.
     Returns:
         list: A list of strings, each containing the markdown representation of a PDF page.
     """
-    client = OpenAI(api_key=api_key, base_url = base_url)  # Create OpenAI client
+    client = OpenAI(api_key=api_key, base_url=base_url, **kwargs)  # Create OpenAI client
 
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
 
