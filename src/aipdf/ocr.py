@@ -69,21 +69,46 @@ def image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEFAULT_PRO
         return None
 
 
-def is_visual_page(page):
+def is_visual_page(page, drawing_area_threshold=0.1):
     """
-    Check if a page contains visual content.
+    Determine if a page is visual based on presence of images or large drawings.
 
     Args:
-        page (fitz.Page): The page object to check.
+        page (fitz.Page): The page object to analyze.
+        drawing_area_threshold (float): Minimum fraction of page area that drawings must cover to be visual.
 
     Returns:
-        bool: True if the page contains visual content, False otherwise.
+        bool: True if visual page, False otherwise.
     """
-    has_images = bool(page.get_images(full=True))
-    has_drawings = len(page.get_drawings()) > 20
-    has_text = bool(page.get_text().strip())
+    page_area = page.rect.width * page.rect.height
 
-    return has_images or has_drawings or not has_text
+    # Rule 1: If even one image is included, it is a visual page
+    images = page.get_images(full=True)
+    if len(images) > 0:
+        return True
+
+    # Rule 2: If large enough area is covered by real drawings, it is a visual page
+    drawing_area = 0
+    for d in page.get_drawings():
+        rect = d.get("rect")  # Get the bounding box the contains the drawing
+        if rect:
+            area = rect.width * rect.height
+            # Ignore tiny drawings
+            if area > 5000:  # minimum size in points² (~0.7% of page if full-page)
+                drawing_area += area
+
+    drawing_fraction = drawing_area / page_area
+
+    if drawing_fraction > drawing_area_threshold:
+        return True
+
+    # Rule 3: If the page does not contain any text, it is a visual page
+    # These could be scanned images or pages with other complex layouts
+    if not page.get_text().strip():
+        return True
+
+    # Otherwise, it's a text page
+    return False
 
 
 def page_to_image(page):
