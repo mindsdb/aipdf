@@ -1,10 +1,12 @@
-import io
 import base64
-import logging
 import concurrent.futures
+import io
+import logging
+import os
 
 import fitz
 from openai import OpenAI
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -163,7 +165,7 @@ def page_to_markdown(page, gap_threshold=10):
 
 def ocr(
     pdf_file, 
-    api_key, 
+    api_key = None,
     model="gpt-4o", 
     base_url='https://api.openai.com/v1', 
     prompt=DEFAULT_PROMPT, 
@@ -186,6 +188,12 @@ def ocr(
     Returns:
         list: A list of strings, each containing the markdown representation of a PDF page.
     """
+    if not api_key:
+        api_key = os.getenv("AIPDF_API_KEY")
+
+    if not api_key:
+        raise ValueError("API key is required. Please provide it as an argument or set the AIPDF_API_KEY environment variable.")
+
     client = OpenAI(api_key=api_key, base_url=base_url, **kwargs)  # Create OpenAI client
 
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
