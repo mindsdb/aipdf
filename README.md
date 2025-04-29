@@ -13,8 +13,9 @@ pip install aipdf
 ```python
 from aipdf import ocr
 
-# Your OpenAI API key   
-api_key = 'your_openai_api_key'
+# Your API key
+# This can also be via the environment variable AIPDF_API_KEY
+api_key = 'your_api_key'
 
 file = open('somepdf.pdf', 'rb')
 markdown_pages = ocr(file, api_key)

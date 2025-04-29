@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 import io
-from src.aipdf.ocr import (
+from aipdf.client import (
     image_to_markdown,
     is_visual_page,
     page_to_image,
@@ -111,7 +111,42 @@ class TestImageToMarkdown(unittest.TestCase):
 
 
 class TestOCR(unittest.TestCase):
-    pass
+    @patch("fitz.open")
+    @patch("openai.OpenAI")
+    def test_ocr_with_text_pages(self, mock_openai, mock_fitz_open):
+        # Mock the PDF document
+        mock_doc = MagicMock()
+        mock_page = MagicMock()
+        mock_page.rect.width = 100
+        mock_page.rect.height = 100
+        mock_doc.page_count = 1
+        mock_doc.load_page.return_value = mock_page
+        mock_fitz_open.return_value = mock_doc
+
+        # Define get_text to return text and blocks
+        def mock_get_text(arg = "text"):
+            if arg == "text":
+                return "Header\nBody text"
+            elif arg == "blocks":
+                return [
+                    (0, 0, 100, 50, "Header"),
+                    (0, 60, 100, 100, "Body text"),
+                ]
+            else:
+                return ""
+        mock_page.get_text.side_effect = mock_get_text
+
+        # Mock OpenAI client
+        mock_client = MagicMock()
+        mock_openai.return_value = mock_client
+
+        pdf_file = io.BytesIO(b"Header\nBody text")
+        result = ocr(pdf_file, api_key="fake_api_key")
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0], "Header\nBody text")
+        mock_page.get_text.assert_any_call()
+        mock_page.get_text.assert_any_call("blocks")
 
 
 if __name__ == "__main__":
