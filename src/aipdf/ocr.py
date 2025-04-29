@@ -5,7 +5,7 @@ import logging
 import os
 
 import fitz
-from openai import OpenAI
+from openai import OpenAI, AzureOpenAI
 
 
 # Set up logging
@@ -194,7 +194,10 @@ def ocr(
     if not api_key:
         raise ValueError("API key is required. Please provide it as an argument or set the AIPDF_API_KEY environment variable.")
 
-    client = OpenAI(api_key=api_key, base_url=base_url, **kwargs)  # Create OpenAI client
+    if base_url and "openai.azure.com" in base_url:
+        client = AzureOpenAI(api_key=api_key, azure_endpoint=base_url, **kwargs) 
+    else:
+        client = OpenAI(api_key=api_key, base_url=base_url, **kwargs)
 
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
 
