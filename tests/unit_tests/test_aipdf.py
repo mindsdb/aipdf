@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 import io
-from aipdf.client import (
+from aipdf.ocr import (
     image_to_markdown,
     is_visual_page,
     page_to_image,
