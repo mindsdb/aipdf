@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import concurrent.futures
 import io
@@ -5,7 +6,7 @@ import logging
 import os
 
 import fitz
-from openai import OpenAI, AzureOpenAI
+from openai import OpenAI, AsyncOpenAI, AzureOpenAI, AsyncAzureOpenAI
 
 
 # Set up logging
@@ -71,6 +72,57 @@ def image_to_markdown(file_object, client, model="gpt-4o",  prompt=DEFAULT_PROMP
     except Exception as e:
         logging.error(f"An error occurred while processing the image: {e}")
         return None
+    
+
+async def image_to_markdown_async(file_object, page_num, client, model="gpt-4o", prompt=DEFAULT_PROMPT):
+    """
+    Asynchronously process a single image file and convert its content to markdown using OpenAI's API.
+
+    Args:
+        file_object (io.BytesIO): The image file object.
+        page_num (int): The page number being processed.
+        client (AsyncOpenAI): The AsyncOpenAI client instance.
+        model (str, optional): by default is gpt-4o
+        prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
+
+    Returns:
+        tuple: A tuple containing the page number and the markdown representation of the image content, or None if an error occurs.
+    """
+    # Log that we're about to process a page
+    logging.info("About to process a page")
+
+    base64_image = base64.b64encode(file_object.read()).decode('utf-8')
+
+    try:
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ]
+        )
+
+        # Extract the markdown content from the response
+        markdown_content = response.choices[0].message.content
+        logging.info("Page processed successfully")
+        return page_num, markdown_content
+
+    except Exception as e:
+        logging.error(f"An error occurred while processing the image: {e}")
+        return page_num, None
 
 
 def is_visual_page(page, drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD):
@@ -248,5 +300,86 @@ def ocr(
                 except Exception as e:
                     logging.error(f"Error processing page {page_num + 1}: {e}")
                     markdown_pages[page_num] = f"Error processing page {page_num + 1}: {str(e)}"
+
+    return markdown_pages
+
+
+async def ocr_async(
+    pdf_file, 
+    api_key = None,
+    model="gpt-4o",
+    base_url='https://api.openai.com/v1',
+    prompt=DEFAULT_PROMPT,
+    pages_list=None,
+    use_llm_for_all=False,
+    drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD,
+    gap_threshold=DEFAULT_GAP_THRESHOLD,
+    **kwargs
+    ):
+    """
+    Asynchronously convert a PDF file to a list of markdown-formatted pages using OpenAI's API.
+    Args:
+        pdf_file (io.BytesIO): The PDF file object.
+        api_key (str): The OpenAI API key.
+        model (str, optional): by default is gpt-4o
+        base_url (str): You can use this one to point the client whereever you need it like Ollama
+        prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
+        pages_list (list, optional): A list of page numbers to process. If provided, only these pages will be converted. Defaults to None, which processes all pages.
+        use_llm_for_all (bool, optional): If True, all pages will be processed using the LLM, regardless of visual content. Defaults to False.
+        **kwargs: Additional keyword arguments.
+    Returns:
+        list: A list of strings, each containing the markdown representation of a PDF page.
+    """
+    if not api_key:
+        api_key = os.getenv("AIPDF_API_KEY")
+    if not api_key:
+        raise ValueError("API key is required. Please provide it as an argument or set the AIPDF_API_KEY environment variable.")
+    
+    if base_url and "openai.azure.com" in base_url:
+        client = AsyncAzureOpenAI(api_key=api_key, azure_endpoint=base_url, **kwargs)
+
+    else:
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url, **kwargs)
+
+    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
+
+    pages_list = pages_list or list(range(1, doc.page_count + 1))  # Default to all pages if not provided
+
+    # List to store markdown content for each page
+    markdown_pages = [None] * len(pages_list)
+
+    image_files = {}
+    for page_num in pages_list:
+        page = doc.load_page(page_num - 1)
+        if not use_llm_for_all and not is_visual_page(page, drawing_area_threshold=drawing_area_threshold):
+            logging.info(f"The content of Page {page.number + 1} will be extracted using text parsing.")
+            # Extract text using traditional OCR
+            markdown_content = page_to_markdown(page, gap_threshold=gap_threshold)
+            if markdown_content:
+                markdown_pages[page_num - 1] = markdown_content
+            else:
+                logging.warning(f"Page {page.number + 1} is empty or contains no text.")
+                markdown_pages[page_num - 1] = f"Page {page.number + 1} is empty or contains no text."
+
+        else:
+            logging.info(f"The content of page {page.number + 1} will be extracted using the LLM.")
+            # Convert page to image
+            image_file = page_to_image(page)
+            image_files[page_num - 1] = io.BytesIO(image_file)
+
+    if image_files:
+        # Process each image file in parallel
+        tasks = []
+        for page_num, img_file in image_files.items():
+            tasks.append(image_to_markdown_async(img_file, page_num, client, model, prompt))
+
+        # Collect results as they complete
+        results = await asyncio.gather(*tasks)
+
+        for page_num, markdown_content in results:
+            if markdown_content:
+                markdown_pages[page_num] = markdown_content
+            else:
+                markdown_pages[page_num] = f"Error processing page {page_num + 1}."
 
     return markdown_pages
