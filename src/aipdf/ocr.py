@@ -401,12 +401,14 @@ async def ocr_async(
     if image_files:
         # Process each image file in parallel
         tasks = []
-        for page_num, img_file in image_files.items():
-            async def task_wrapper(img_file=img_file, page_num=page_num):
-                markdown_content = await image_to_markdown_async(img_file, client, model, prompt)
-                return page_num, markdown_content
 
-            tasks.append(task_wrapper())
+        async def task_wrapper(img_file, page_num):
+            markdown_content = await image_to_markdown_async(img_file, client, model, prompt)
+            return page_num, markdown_content
+
+        for page_num, img_file in image_files.items():
+
+            tasks.append(task_wrapper(img_file, page_num))
 
         # Collect results as they complete
         results = await asyncio.gather(*tasks)
