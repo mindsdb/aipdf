@@ -20,8 +20,10 @@ Extract the full markdown text from the given image, following these guidelines:
 - if there are charts, for each chart include a markdown table with the data represents the chart, a column for each of the variables of the cart and the relevant estimated values
           
 """
+DEFAULT_DRAWING_AREA_THRESHOLD = 0.1  # 10% of the page area
+DEFAULT_GAP_THRESHOLD = 10  # 10 points
 
-def image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEFAULT_PROMPT):
+def image_to_markdown(file_object, client, model="gpt-4o",  prompt=DEFAULT_PROMPT):
     """
     Process a single image file and convert its content to markdown using OpenAI's API.
 
@@ -71,7 +73,7 @@ def image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEFAULT_PRO
         return None
 
 
-def is_visual_page(page, drawing_area_threshold=0.1):
+def is_visual_page(page, drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD):
     """
     Determine if a page is visual based on presence of images or large drawings.
 
@@ -131,7 +133,7 @@ def page_to_image(page):
     return pix.tobytes("png")
 
 
-def page_to_markdown(page, gap_threshold=10):
+def page_to_markdown(page, gap_threshold=DEFAULT_GAP_THRESHOLD):
     """
     Convert a page of a PDF file to markdown format.
 
@@ -171,6 +173,8 @@ def ocr(
     prompt=DEFAULT_PROMPT, 
     pages_list=None,
     use_llm_for_all=False,
+    drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD,
+    gap_threshold=DEFAULT_GAP_THRESHOLD,
     **kwargs
     ):
     """
@@ -209,10 +213,10 @@ def ocr(
     image_files = {}
     for page_num in pages_list:
         page = doc.load_page(page_num - 1)
-        if not use_llm_for_all and not is_visual_page(page):
+        if not use_llm_for_all and not is_visual_page(page, drawing_area_threshold=drawing_area_threshold):
             logging.info(f"The content of Page {page.number + 1} will be extracted using text parsing.")
             # Extract text using traditional OCR
-            markdown_content = page_to_markdown(page)
+            markdown_content = page_to_markdown(page, gap_threshold=gap_threshold)
             if markdown_content:
                 markdown_pages[page_num - 1] = markdown_content
             else:
