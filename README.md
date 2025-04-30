@@ -27,6 +27,25 @@ By default, AIPDF attempts to determine which pages to send to the LLM based on 
 markdown_pages = ocr(file, api_key, use_llm_for_all=True)
 ```
 
+Every call to the LLM is made in parallel, so the processing time is significantly reduced. The above function will make these parallel calls using threading, however, it is also possible to make asynchronous calls instead by using the `ocr_async` function:
+
+```python
+from aipdf import ocr_async
+import asyncio
+
+# Your API key
+# This can also be via the environment variable AIPDF_API_KEY
+api_key = 'your_api_key'
+
+file = open('somepdf.pdf', 'rb')
+
+async def main():
+    markdown_pages = await ocr_async(file, api_key)
+    return markdown_pages
+
+markdown_pages = asyncio.run(main())
+```
+
 ##  Ollama
 
 You can use with any ollama multi-modal models 
