@@ -24,6 +24,38 @@ Extract the full markdown text from the given image, following these guidelines:
 DEFAULT_DRAWING_AREA_THRESHOLD = 0.1  # 10% of the page area
 DEFAULT_GAP_THRESHOLD = 10  # 10 points
 
+
+def get_openai_client(api_key=None, base_url='https://api.openai.com/v1', is_async=False, **kwargs):
+    """
+    Get an OpenAI client instance.
+
+    Args:
+        api_key (str): The OpenAI API key.
+        base_url (str): The base URL for the OpenAI API.
+        is_async (bool): Whether to create an asynchronous client.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        OpenAI or AsyncOpenAI: An instance of the OpenAI client.
+    """
+    if not api_key:
+        api_key = os.getenv("AIPDF_API_KEY")
+
+    if not api_key:
+        raise ValueError("API key is required. Please provide it as an argument or set the AIPDF_API_KEY environment variable.")
+    
+    if base_url and "openai.azure.com" in base_url:
+        if is_async:
+            return AsyncAzureOpenAI(api_key=api_key, azure_endpoint=base_url, **kwargs)
+        else:
+            return AzureOpenAI(api_key=api_key, azure_endpoint=base_url, **kwargs)
+
+    if is_async:
+        return AsyncOpenAI(api_key=api_key, base_url=base_url, **kwargs)
+    else:
+        return OpenAI(api_key=api_key, base_url=base_url, **kwargs)
+
+
 def image_to_markdown(file_object, client, model="gpt-4o",  prompt=DEFAULT_PROMPT):
     """
     Process a single image file and convert its content to markdown using OpenAI's API.
@@ -74,13 +106,12 @@ def image_to_markdown(file_object, client, model="gpt-4o",  prompt=DEFAULT_PROMP
         return None
     
 
-async def image_to_markdown_async(file_object, page_num, client, model="gpt-4o", prompt=DEFAULT_PROMPT):
+async def image_to_markdown_async(file_object, client, model="gpt-4o", prompt=DEFAULT_PROMPT):
     """
     Asynchronously process a single image file and convert its content to markdown using OpenAI's API.
 
     Args:
         file_object (io.BytesIO): The image file object.
-        page_num (int): The page number being processed.
         client (AsyncOpenAI): The AsyncOpenAI client instance.
         model (str, optional): by default is gpt-4o
         prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
@@ -118,11 +149,11 @@ async def image_to_markdown_async(file_object, page_num, client, model="gpt-4o",
         # Extract the markdown content from the response
         markdown_content = response.choices[0].message.content
         logging.info("Page processed successfully")
-        return page_num, markdown_content
+        return markdown_content
 
     except Exception as e:
         logging.error(f"An error occurred while processing the image: {e}")
-        return page_num, None
+        return None
 
 
 def is_visual_page(page, drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD):
@@ -217,44 +248,20 @@ def page_to_markdown(page, gap_threshold=DEFAULT_GAP_THRESHOLD):
     return "\n".join(markdown_page)
 
 
-def ocr(
-    pdf_file, 
-    api_key = None,
-    model="gpt-4o", 
-    base_url='https://api.openai.com/v1', 
-    prompt=DEFAULT_PROMPT, 
-    pages_list=None,
-    use_llm_for_all=False,
-    drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD,
-    gap_threshold=DEFAULT_GAP_THRESHOLD,
-    **kwargs
-    ):
+def process_pages(pdf_file, pages_list=None, use_llm_for_all=False, drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD, gap_threshold=DEFAULT_GAP_THRESHOLD):
     """
-    Convert a PDF file to a list of markdown-formatted pages using OpenAI's API.
+    Process the pages of a PDF file to determine which ones are visual and which ones are text-based.
 
     Args:
         pdf_file (io.BytesIO): The PDF file object.
-        api_key (str): The OpenAI API key.
-        model (str, optional): by default is gpt-4o
-        base_url (str): You can use this one to point the client whereever you need it like Ollama
-        prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
         pages_list (list, optional): A list of page numbers to process. If provided, only these pages will be converted. Defaults to None, which processes all pages.
         use_llm_for_all (bool, optional): If True, all pages will be processed using the LLM, regardless of visual content. Defaults to False.
-        **kwargs: Additional keyword arguments.
+        drawing_area_threshold (float): Minimum fraction of page area that drawings must cover to be visual.
+        gap_threshold (int): The threshold for vertical gaps between text blocks.
+
     Returns:
-        list: A list of strings, each containing the markdown representation of a PDF page.
+        tuple: A tuple containing a list of markdown-formatted pages and a dictionary of image files.
     """
-    if not api_key:
-        api_key = os.getenv("AIPDF_API_KEY")
-
-    if not api_key:
-        raise ValueError("API key is required. Please provide it as an argument or set the AIPDF_API_KEY environment variable.")
-
-    if base_url and "openai.azure.com" in base_url:
-        client = AzureOpenAI(api_key=api_key, azure_endpoint=base_url, **kwargs) 
-    else:
-        client = OpenAI(api_key=api_key, base_url=base_url, **kwargs)
-
     doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
 
     pages_list = pages_list or list(range(1, doc.page_count + 1))  # Default to all pages if not provided
@@ -280,6 +287,51 @@ def ocr(
             # Convert page to image
             image_file = page_to_image(page)
             image_files[page_num - 1] = io.BytesIO(image_file)
+
+    return markdown_pages, image_files
+
+
+def ocr(
+    pdf_file, 
+    api_key = None,
+    model="gpt-4o", 
+    base_url='https://api.openai.com/v1', 
+    prompt=DEFAULT_PROMPT, 
+    pages_list=None,
+    use_llm_for_all=False,
+    drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD,
+    gap_threshold=DEFAULT_GAP_THRESHOLD,
+    **kwargs
+    ):
+    """
+    Convert a PDF file to a list of markdown-formatted pages using text parsing and OpenAI's API.
+    The OpenAI API is called in parallel using threading for each image file.
+    This function is synchronous.
+
+    Args:
+        pdf_file (io.BytesIO): The PDF file object.
+        api_key (str): The OpenAI API key.
+        model (str, optional): by default is gpt-4o
+        base_url (str): You can use this one to point the client whereever you need it like Ollama
+        prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
+        pages_list (list, optional): A list of page numbers to process. If provided, only these pages will be converted. Defaults to None, which processes all pages.
+        use_llm_for_all (bool, optional): If True, all pages will be processed using the LLM, regardless of visual content. Defaults to False.
+        drawing_area_threshold (float): Minimum fraction of page area that drawings must cover to be visual.
+        gap_threshold (int): The threshold for vertical gaps between text blocks.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        list: A list of strings, each containing the markdown representation of a PDF page.
+    """
+    client = get_openai_client(api_key=api_key, base_url=base_url, **kwargs)
+
+    markdown_pages, image_files = process_pages(
+        pdf_file,
+        pages_list=pages_list,
+        use_llm_for_all=use_llm_for_all,
+        drawing_area_threshold=drawing_area_threshold,
+        gap_threshold=gap_threshold
+    )
 
     if image_files:
         # Process each image file in parallel
@@ -317,7 +369,10 @@ async def ocr_async(
     **kwargs
     ):
     """
-    Asynchronously convert a PDF file to a list of markdown-formatted pages using OpenAI's API.
+    Convert a PDF file to a list of markdown-formatted pages using text parsing and OpenAI's API.
+    The OpenAI API is called asynchronously for each image file.
+    This function is asynchronous.
+
     Args:
         pdf_file (io.BytesIO): The PDF file object.
         api_key (str): The OpenAI API key.
@@ -326,52 +381,32 @@ async def ocr_async(
         prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
         pages_list (list, optional): A list of page numbers to process. If provided, only these pages will be converted. Defaults to None, which processes all pages.
         use_llm_for_all (bool, optional): If True, all pages will be processed using the LLM, regardless of visual content. Defaults to False.
+        drawing_area_threshold (float): Minimum fraction of page area that drawings must cover to be visual.
+        gap_threshold (int): The threshold for vertical gaps between text blocks.
         **kwargs: Additional keyword arguments.
+
     Returns:
         list: A list of strings, each containing the markdown representation of a PDF page.
     """
-    if not api_key:
-        api_key = os.getenv("AIPDF_API_KEY")
-    if not api_key:
-        raise ValueError("API key is required. Please provide it as an argument or set the AIPDF_API_KEY environment variable.")
-    
-    if base_url and "openai.azure.com" in base_url:
-        client = AsyncAzureOpenAI(api_key=api_key, azure_endpoint=base_url, **kwargs)
+    client = get_openai_client(api_key=api_key, base_url=base_url, is_async=True, **kwargs)
 
-    else:
-        client = AsyncOpenAI(api_key=api_key, base_url=base_url, **kwargs)
-
-    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
-
-    pages_list = pages_list or list(range(1, doc.page_count + 1))  # Default to all pages if not provided
-
-    # List to store markdown content for each page
-    markdown_pages = [None] * len(pages_list)
-
-    image_files = {}
-    for page_num in pages_list:
-        page = doc.load_page(page_num - 1)
-        if not use_llm_for_all and not is_visual_page(page, drawing_area_threshold=drawing_area_threshold):
-            logging.info(f"The content of Page {page.number + 1} will be extracted using text parsing.")
-            # Extract text using traditional OCR
-            markdown_content = page_to_markdown(page, gap_threshold=gap_threshold)
-            if markdown_content:
-                markdown_pages[page_num - 1] = markdown_content
-            else:
-                logging.warning(f"Page {page.number + 1} is empty or contains no text.")
-                markdown_pages[page_num - 1] = f"Page {page.number + 1} is empty or contains no text."
-
-        else:
-            logging.info(f"The content of page {page.number + 1} will be extracted using the LLM.")
-            # Convert page to image
-            image_file = page_to_image(page)
-            image_files[page_num - 1] = io.BytesIO(image_file)
+    markdown_pages, image_files = process_pages(
+        pdf_file,
+        pages_list=pages_list,
+        use_llm_for_all=use_llm_for_all,
+        drawing_area_threshold=drawing_area_threshold,
+        gap_threshold=gap_threshold
+    )
 
     if image_files:
         # Process each image file in parallel
         tasks = []
         for page_num, img_file in image_files.items():
-            tasks.append(image_to_markdown_async(img_file, page_num, client, model, prompt))
+            async def task_wrapper(img_file=img_file, page_num=page_num):
+                markdown_content = await image_to_markdown_async(img_file, client, model, prompt)
+                return page_num, markdown_content
+
+            tasks.append(task_wrapper())
 
         # Collect results as they complete
         results = await asyncio.gather(*tasks)
