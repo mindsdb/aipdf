@@ -1,10 +1,12 @@
-import io
 import base64
-import logging
 import concurrent.futures
+import io
+import logging
+import os
 
-from pdf2image import convert_from_bytes
-from openai import OpenAI
+import fitz
+from openai import OpenAI, AzureOpenAI
+
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,8 +20,10 @@ Extract the full markdown text from the given image, following these guidelines:
 - if there are charts, for each chart include a markdown table with the data represents the chart, a column for each of the variables of the cart and the relevant estimated values
           
 """
+DEFAULT_DRAWING_AREA_THRESHOLD = 0.1  # 10% of the page area
+DEFAULT_GAP_THRESHOLD = 10  # 10 points
 
-def process_image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEFAULT_PROMPT):
+def image_to_markdown(file_object, client, model="gpt-4o",  prompt=DEFAULT_PROMPT):
     """
     Process a single image file and convert its content to markdown using OpenAI's API.
 
@@ -36,7 +40,7 @@ def process_image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEF
     logging.info("About to process a page")
 
     base64_image = base64.b64encode(file_object.read()).decode('utf-8')
-    
+
     try:
         response = client.chat.completions.create(
             model=model,
@@ -58,57 +62,121 @@ def process_image_to_markdown(file_object, client, model="gpt-4o",  prompt = DEF
                 }
             ]
         )
-        
+
         # Extract the markdown content from the response
         markdown_content = response.choices[0].message.content
         logging.info("Page processed successfully")
         return markdown_content
-    
+
     except Exception as e:
         logging.error(f"An error occurred while processing the image: {e}")
         return None
 
-    
-def pdf_to_image_files(pdf_file):
+
+def is_visual_page(page, drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD):
     """
-    Convert a PDF file to a list of image file objects.
+    Determine if a page is visual based on presence of images or large drawings.
 
     Args:
-        pdf_file (io.BytesIO): The PDF file object.
+        page (fitz.Page): The page object to analyze.
+        drawing_area_threshold (float): Minimum fraction of page area that drawings must cover to be visual.
 
     Returns:
-        list: A list of io.BytesIO objects, each containing a page of the PDF as a PNG image.
+        bool: True if visual page, False otherwise.
     """
-    # Read the PDF file content
-    pdf_content = pdf_file.read()
-    
-    # Convert PDF pages to images
-    images = convert_from_bytes(pdf_content)
-    
-    # List to store image file objects
-    image_files = []
-    
-    # Process each image
-    for i, image in enumerate(images):
-        # Create a byte stream to store the image
-        img_byte_arr = io.BytesIO()
-        
-        # Save the image as PNG to the byte stream
-        image.save(img_byte_arr, format='PNG')
-        
-        # Seek to the beginning of the stream
-        img_byte_arr.seek(0)
-        
-        # Create a file-like object and add it to the list
-        image_file = io.BytesIO(img_byte_arr.getvalue())
-        image_file.name = f"page_{i+1}.png"
-        image_files.append(image_file)
-        
-    
-    return image_files
+    page_area = page.rect.width * page.rect.height
+
+    # Rule 1: If even one image is included, it is a visual page
+    images = page.get_images(full=True)
+    if len(images) > 0:
+        return True
+
+    # Rule 2: If large enough area is covered by real drawings, it is a visual page
+    drawing_area = 0
+    for d in page.get_drawings():
+        rect = d.get("rect")  # Get the bounding box the contains the drawing
+        if rect:
+            area = rect.width * rect.height
+            # Ignore tiny drawings
+            if area > 5000:  # minimum size in points² (~0.7% of page if full-page)
+                drawing_area += area
+
+    drawing_fraction = drawing_area / page_area
+
+    if drawing_fraction > drawing_area_threshold:
+        return True
+
+    # Rule 3: If the page does not contain any text, it is a visual page
+    # These could be scanned images or pages with other complex layouts
+    if not page.get_text().strip():
+        return True
+
+    # Otherwise, it's a text page
+    return False
 
 
-def ocr(pdf_file, api_key, model="gpt-4o", base_url= 'https://api.openai.com/v1', prompt=DEFAULT_PROMPT, pages_list = None):
+def page_to_image(page):
+    """
+    Convert a page of a PDF file to an image file.
+
+    Args:
+        page (fitz.Page): The page object to convert.
+
+    Returns:
+        bytes: The image file in bytes.
+    """
+    zoom_x = 2.0  # Horizontal zoom
+    zoom_y = 2.0  # Vertical zoom
+    mat = fitz.Matrix(zoom_x, zoom_y)  # Zoom factor 2 in each dimension
+
+    pix = page.get_pixmap(matrix=mat)
+    return pix.tobytes("png")
+
+
+def page_to_markdown(page, gap_threshold=DEFAULT_GAP_THRESHOLD):
+    """
+    Convert a page of a PDF file to markdown format.
+
+    Args:
+        page (fitz.Page): The page object to convert.
+        gap_threshold (int, optional): The threshold for vertical gaps between text blocks. Defaults to 10.
+
+    Returns:
+        str: The markdown representation of the page.
+    """
+    blocks = page.get_text("blocks")
+    blocks.sort(key=lambda block: (block[1], block[0]))
+
+    markdown_page = []
+    previous_block_bottom = 0
+
+    for block in blocks:
+        y0 = block[1]
+        y1 = block[3]
+        block_text = block[4]
+
+        # Check if there's a large vertical gap between this block and the previous one
+        if y0 - previous_block_bottom > gap_threshold:
+            markdown_page.append("")
+
+        markdown_page.append(block_text)
+        previous_block_bottom = y1
+
+    return "\n".join(markdown_page)
+
+
+def ocr(
+    pdf_file, 
+    api_key = None,
+    model="gpt-4o", 
+    base_url='https://api.openai.com/v1', 
+    prompt=DEFAULT_PROMPT, 
+    pages_list=None,
+    use_llm_for_all=False,
+    drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD,
+    gap_threshold=DEFAULT_GAP_THRESHOLD,
+    **kwargs
+    ):
     """
     Convert a PDF file to a list of markdown-formatted pages using OpenAI's API.
 
@@ -119,39 +187,66 @@ def ocr(pdf_file, api_key, model="gpt-4o", base_url= 'https://api.openai.com/v1'
         base_url (str): You can use this one to point the client whereever you need it like Ollama
         prompt (str, optional): The prompt to send to the API. Defaults to DEFAULT_PROMPT.
         pages_list (list, optional): A list of page numbers to process. If provided, only these pages will be converted. Defaults to None, which processes all pages.
+        use_llm_for_all (bool, optional): If True, all pages will be processed using the LLM, regardless of visual content. Defaults to False.
+        **kwargs: Additional keyword arguments.
     Returns:
         list: A list of strings, each containing the markdown representation of a PDF page.
     """
-    client = OpenAI(api_key=api_key, base_url = base_url)  # Create OpenAI client
-    # Convert PDF to image files
-    image_files = pdf_to_image_files(pdf_file)
+    if not api_key:
+        api_key = os.getenv("AIPDF_API_KEY")
 
-    if pages_list:
-        # Filter image_files to only include pages in page_list
-        image_files = [img for i, img in enumerate(image_files) if i + 1 in pages_list]
-    
+    if not api_key:
+        raise ValueError("API key is required. Please provide it as an argument or set the AIPDF_API_KEY environment variable.")
+
+    if base_url and "openai.azure.com" in base_url:
+        client = AzureOpenAI(api_key=api_key, azure_endpoint=base_url, **kwargs) 
+    else:
+        client = OpenAI(api_key=api_key, base_url=base_url, **kwargs)
+
+    doc = fitz.open(stream=pdf_file.read(), filetype="pdf")
+
+    pages_list = pages_list or list(range(1, doc.page_count + 1))  # Default to all pages if not provided
+
     # List to store markdown content for each page
-    markdown_pages = [None] * len(image_files)
+    markdown_pages = [None] * len(pages_list)
 
-    # Process each image file in parallel
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        # Submit tasks for each image file
-        future_to_page = {executor.submit(process_image_to_markdown, img_file, client, model, prompt): i 
-                          for i, img_file in enumerate(image_files)}
-        
-        # Collect results as they complete
-        for future in concurrent.futures.as_completed(future_to_page):
-            page_num = future_to_page[future]
-            try:
-                markdown_content = future.result()
-                if markdown_content:
-                    markdown_pages[page_num] = markdown_content
-                else:
-                    markdown_pages[page_num] = f"Error processing page {page_num + 1}."
-            except Exception as e:
-                logging.error(f"Error processing page {page_num + 1}: {e}")
-                markdown_pages[page_num] = f"Error processing page {page_num + 1}: {str(e)}"
+    image_files = {}
+    for page_num in pages_list:
+        page = doc.load_page(page_num - 1)
+        if not use_llm_for_all and not is_visual_page(page, drawing_area_threshold=drawing_area_threshold):
+            logging.info(f"The content of Page {page.number + 1} will be extracted using text parsing.")
+            # Extract text using traditional OCR
+            markdown_content = page_to_markdown(page, gap_threshold=gap_threshold)
+            if markdown_content:
+                markdown_pages[page_num - 1] = markdown_content
+            else:
+                logging.warning(f"Page {page.number + 1} is empty or contains no text.")
+                markdown_pages[page_num - 1] = f"Page {page.number + 1} is empty or contains no text."
+
+        else:
+            logging.info(f"The content of page {page.number + 1} will be extracted using the LLM.")
+            # Convert page to image
+            image_file = page_to_image(page)
+            image_files[page_num - 1] = io.BytesIO(image_file)
+
+    if image_files:
+        # Process each image file in parallel
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            # Submit tasks for each image file
+            future_to_page = {executor.submit(image_to_markdown, img_file, client, model, prompt): page_num 
+                            for page_num, img_file in image_files.items()}
+            
+            # Collect results as they complete
+            for future in concurrent.futures.as_completed(future_to_page):
+                page_num = future_to_page[future]
+                try:
+                    markdown_content = future.result()
+                    if markdown_content:
+                        markdown_pages[page_num] = markdown_content
+                    else:
+                        markdown_pages[page_num] = f"Error processing page {page_num + 1}."
+                except Exception as e:
+                    logging.error(f"Error processing page {page_num + 1}: {e}")
+                    markdown_pages[page_num] = f"Error processing page {page_num + 1}: {str(e)}"
 
     return markdown_pages
-
-
