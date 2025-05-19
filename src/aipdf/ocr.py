@@ -324,6 +324,12 @@ def ocr(
         list: A list of strings, each containing the markdown representation of a PDF page.
     """
     client = get_openai_client(api_key=api_key, base_url=base_url, **kwargs)
+    
+    # Identify the maximum number of workers for parallel processing
+    max_workers = os.getenv("AIPDF_MAX_CONCURRENT_REQUESTS", None)
+    if max_workers:
+        logging.info("The maximum number of concurrent requests is set to %s", max_workers)
+        max_workers = int(max_workers)
 
     markdown_pages, image_files = process_pages(
         pdf_file,
@@ -334,8 +340,13 @@ def ocr(
     )
 
     if image_files:
+        if max_workers:
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+        else:
+            executor = concurrent.futures.ThreadPoolExecutor()
+
         # Process each image file in parallel
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        with executor:
             # Submit tasks for each image file
             future_to_page = {executor.submit(image_to_markdown, img_file, client, model, prompt): page_num 
                             for page_num, img_file in image_files.items()}
