@@ -324,6 +324,12 @@ def ocr(
         list: A list of strings, each containing the markdown representation of a PDF page.
     """
     client = get_openai_client(api_key=api_key, base_url=base_url, **kwargs)
+    
+    # Identify the maximum number of workers for parallel processing
+    max_workers = os.getenv("AIPDF_MAX_CONCURRENT_REQUESTS", None)
+    if max_workers:
+        logging.info("The maximum number of concurrent requests is set to %s", max_workers)
+        max_workers = int(max_workers)
 
     markdown_pages, image_files = process_pages(
         pdf_file,
@@ -334,8 +340,13 @@ def ocr(
     )
 
     if image_files:
+        if max_workers:
+            executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+        else:
+            executor = concurrent.futures.ThreadPoolExecutor()
+
         # Process each image file in parallel
-        with concurrent.futures.ThreadPoolExecutor() as executor:
+        with executor:
             # Submit tasks for each image file
             future_to_page = {executor.submit(image_to_markdown, img_file, client, model, prompt): page_num 
                             for page_num, img_file in image_files.items()}
@@ -390,6 +401,14 @@ async def ocr_async(
     """
     client = get_openai_client(api_key=api_key, base_url=base_url, is_async=True, **kwargs)
 
+    # Set up a semaphore for limiting concurrent requests if specified
+    semaphore = None
+    max_concurrent_requests = os.getenv("AIPDF_MAX_CONCURRENT_REQUESTS", None)
+    if max_concurrent_requests:
+        logging.info("The maximum number of concurrent requests is set to %s", max_concurrent_requests)
+        max_concurrent_requests = int(max_concurrent_requests)
+        semaphore = asyncio.Semaphore(max_concurrent_requests)
+
     markdown_pages, image_files = process_pages(
         pdf_file,
         pages_list=pages_list,
@@ -403,12 +422,14 @@ async def ocr_async(
         tasks = []
 
         async def task_wrapper(img_file, page_num):
-            markdown_content = await image_to_markdown_async(img_file, client, model, prompt)
+            if semaphore:
+                async with semaphore:
+                    markdown_content = await image_to_markdown_async(img_file, client, model, prompt)
+            else:
+                markdown_content = await image_to_markdown_async(img_file, client, model, prompt)
             return page_num, markdown_content
 
-        for page_num, img_file in image_files.items():
-
-            tasks.append(task_wrapper(img_file, page_num))
+        tasks = [task_wrapper(img_file, page_num) for page_num, img_file in image_files.items()]
 
         # Collect results as they complete
         results = await asyncio.gather(*tasks)

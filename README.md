@@ -46,6 +46,8 @@ async def main():
 markdown_pages = asyncio.run(main())
 ```
 
+The maximum number of concurrent requests made to the LLM can also be controlled via the `AIPDF_MAX_CONCURRENT_REQUESTS` environment variable. By default, there is no limit set.
+
 ##  Ollama
 
 You can use with any ollama multi-modal models 
