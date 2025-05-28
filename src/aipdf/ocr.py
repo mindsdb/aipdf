@@ -97,31 +97,31 @@ def _validate_and_extract_content(response):
     """
     # Validate the response structure before accessing choices
     if not response:
-        logging.error("Received empty response from OpenAI API")
+        logging.error(f"Received empty response from OpenAI API: {response}")
         return None
         
     if not hasattr(response, 'choices') or not response.choices:
-        logging.error("Response does not contain choices or choices is empty")
+        logging.error(f"Response does not contain choices or choices is empty. Response: {response}")
         return None
         
     if len(response.choices) == 0:
-        logging.error("Response choices list is empty")
+        logging.error(f"Response choices list is empty. Response: {response}")
         return None
         
     first_choice = response.choices[0]
     if not hasattr(first_choice, 'message') or not first_choice.message:
-        logging.error("Response choice does not contain message")
+        logging.error(f"Response choice does not contain message. First choice: {first_choice}")
         return None
         
     if not hasattr(first_choice.message, 'content'):
-        logging.error("Response message does not contain content")
+        logging.error(f"Response message does not contain content. Message: {first_choice.message}")
         return None
         
     markdown_content = first_choice.message.content
     
     # Additional check for empty or None content
     if not markdown_content:
-        logging.warning("Response content is empty or None")
+        logging.warning(f"Response content is empty or None. Content: {repr(markdown_content)}")
         return None
         
     return markdown_content
