@@ -9,9 +9,6 @@ import fitz
 from openai import OpenAI, AsyncOpenAI, AzureOpenAI, AsyncAzureOpenAI
 
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 DEFAULT_PROMPT = """
 Extract the full markdown text from the given image, following these guidelines:
 - Respond only with markdown, no additional commentary.  
@@ -56,6 +53,80 @@ def get_openai_client(api_key=None, base_url='https://api.openai.com/v1', is_asy
         return OpenAI(api_key=api_key, base_url=base_url, **kwargs)
 
 
+def _prepare_image_messages(file_object, prompt):
+    """
+    Helper function to prepare messages for OpenAI API call.
+    
+    Args:
+        file_object (io.BytesIO): The image file object.
+        prompt (str): The prompt to send to the API.
+        
+    Returns:
+        list: The messages list for the API call.
+    """
+    base64_image = base64.b64encode(file_object.read()).decode('utf-8')
+    
+    return [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": prompt
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}"
+                    }
+                }
+            ]
+        }
+    ]
+
+
+def _validate_and_extract_content(response):
+    """
+    Helper function to validate OpenAI API response and extract content.
+    
+    Args:
+        response: The response object from OpenAI API.
+        
+    Returns:
+        str or None: The extracted content, or None if validation fails.
+    """
+    # Validate the response structure before accessing choices
+    if not response:
+        logging.error("Received empty response from OpenAI API")
+        return None
+        
+    if not hasattr(response, 'choices') or not response.choices:
+        logging.error("Response does not contain choices or choices is empty")
+        return None
+        
+    if len(response.choices) == 0:
+        logging.error("Response choices list is empty")
+        return None
+        
+    first_choice = response.choices[0]
+    if not hasattr(first_choice, 'message') or not first_choice.message:
+        logging.error("Response choice does not contain message")
+        return None
+        
+    if not hasattr(first_choice.message, 'content'):
+        logging.error("Response message does not contain content")
+        return None
+        
+    markdown_content = first_choice.message.content
+    
+    # Additional check for empty or None content
+    if not markdown_content:
+        logging.warning("Response content is empty or None")
+        return None
+        
+    return markdown_content
+
+
 def image_to_markdown(file_object, client, model="gpt-4o",  prompt=DEFAULT_PROMPT):
     """
     Process a single image file and convert its content to markdown using OpenAI's API.
@@ -70,36 +141,24 @@ def image_to_markdown(file_object, client, model="gpt-4o",  prompt=DEFAULT_PROMP
         str: The markdown representation of the image content, or None if an error occurs.
     """
     # Log that we're about to process a page
-    logging.info("About to process a page")
+    logging.debug("About to process a page")
 
-    base64_image = base64.b64encode(file_object.read()).decode('utf-8')
+    messages = _prepare_image_messages(file_object, prompt)
 
     try:
         response = client.chat.completions.create(
             model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
-            ]
+            messages=messages
         )
 
-        # Extract the markdown content from the response
-        markdown_content = response.choices[0].message.content
-        logging.info("Page processed successfully")
-        return markdown_content
+        markdown_content = _validate_and_extract_content(response)
+        
+        if markdown_content:
+            logging.debug("Page processed successfully")
+            return markdown_content
+        else:
+            logging.warning("Page is empty or contains no text.")
+            return None
 
     except Exception as e:
         logging.error(f"An error occurred while processing the image: {e}")
@@ -120,36 +179,24 @@ async def image_to_markdown_async(file_object, client, model="gpt-4o", prompt=DE
         tuple: A tuple containing the page number and the markdown representation of the image content, or None if an error occurs.
     """
     # Log that we're about to process a page
-    logging.info("About to process a page")
+    logging.debug("About to process a page")
 
-    base64_image = base64.b64encode(file_object.read()).decode('utf-8')
+    messages = _prepare_image_messages(file_object, prompt)
 
     try:
         response = await client.chat.completions.create(
             model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
-            ]
+            messages=messages
         )
 
-        # Extract the markdown content from the response
-        markdown_content = response.choices[0].message.content
-        logging.info("Page processed successfully")
-        return markdown_content
+        markdown_content = _validate_and_extract_content(response)
+        
+        if markdown_content:
+            logging.debug("Page processed successfully")
+            return markdown_content
+        else:
+            logging.warning("Page is empty or contains no text.")
+            return None
 
     except Exception as e:
         logging.error(f"An error occurred while processing the image: {e}")
@@ -273,7 +320,7 @@ def process_pages(pdf_file, pages_list=None, use_llm_for_all=False, drawing_area
     for page_num in pages_list:
         page = doc.load_page(page_num - 1)
         if not use_llm_for_all and not is_visual_page(page, drawing_area_threshold=drawing_area_threshold):
-            logging.info(f"The content of Page {page.number + 1} will be extracted using text parsing.")
+            logging.debug(f"The content of Page {page.number + 1} will be extracted using text parsing.")
             # Extract text using traditional OCR
             markdown_content = page_to_markdown(page, gap_threshold=gap_threshold)
             if markdown_content:
@@ -283,7 +330,7 @@ def process_pages(pdf_file, pages_list=None, use_llm_for_all=False, drawing_area
                 markdown_pages[page_num - 1] = f"Page {page.number + 1} is empty or contains no text."
 
         else:
-            logging.info(f"The content of page {page.number + 1} will be extracted using the LLM.")
+            logging.debug(f"The content of page {page.number + 1} will be extracted using the LLM.")
             # Convert page to image
             image_file = page_to_image(page)
             image_files[page_num - 1] = io.BytesIO(image_file)
@@ -301,6 +348,7 @@ def ocr(
     use_llm_for_all=False,
     drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD,
     gap_threshold=DEFAULT_GAP_THRESHOLD,
+    logging_level=logging.INFO,
     **kwargs
     ):
     """
@@ -318,11 +366,15 @@ def ocr(
         use_llm_for_all (bool, optional): If True, all pages will be processed using the LLM, regardless of visual content. Defaults to False.
         drawing_area_threshold (float): Minimum fraction of page area that drawings must cover to be visual.
         gap_threshold (int): The threshold for vertical gaps between text blocks.
+        logging_level (int): The logging level. Defaults to logging.INFO.
         **kwargs: Additional keyword arguments.
 
     Returns:
         list: A list of strings, each containing the markdown representation of a PDF page.
     """
+    # Set up logging
+    logging.basicConfig(level=logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
+
     client = get_openai_client(api_key=api_key, base_url=base_url, **kwargs)
     
     # Identify the maximum number of workers for parallel processing
@@ -377,6 +429,7 @@ async def ocr_async(
     use_llm_for_all=False,
     drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD,
     gap_threshold=DEFAULT_GAP_THRESHOLD,
+    logging_level=logging.INFO,
     **kwargs
     ):
     """
@@ -394,11 +447,15 @@ async def ocr_async(
         use_llm_for_all (bool, optional): If True, all pages will be processed using the LLM, regardless of visual content. Defaults to False.
         drawing_area_threshold (float): Minimum fraction of page area that drawings must cover to be visual.
         gap_threshold (int): The threshold for vertical gaps between text blocks.
+        logging_level (int): The logging level. Defaults to logging.INFO.
         **kwargs: Additional keyword arguments.
 
     Returns:
         list: A list of strings, each containing the markdown representation of a PDF page.
     """
+    # Set up logging
+    logging.basicConfig(level=logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
+
     client = get_openai_client(api_key=api_key, base_url=base_url, is_async=True, **kwargs)
 
     # Set up a semaphore for limiting concurrent requests if specified
