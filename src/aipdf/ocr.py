@@ -380,7 +380,7 @@ def ocr(
     # Identify the maximum number of workers for parallel processing
     max_workers = os.getenv("AIPDF_MAX_CONCURRENT_REQUESTS", None)
     if max_workers:
-        logging.info("The maximum number of concurrent requests is set to %s", max_workers)
+        logging.debug("The maximum number of concurrent requests is set to %s", max_workers)
         max_workers = int(max_workers)
 
     markdown_pages, image_files = process_pages(
@@ -462,7 +462,7 @@ async def ocr_async(
     semaphore = None
     max_concurrent_requests = os.getenv("AIPDF_MAX_CONCURRENT_REQUESTS", None)
     if max_concurrent_requests:
-        logging.info("The maximum number of concurrent requests is set to %s", max_concurrent_requests)
+        logging.debug("The maximum number of concurrent requests is set to %s", max_concurrent_requests)
         max_concurrent_requests = int(max_concurrent_requests)
         semaphore = asyncio.Semaphore(max_concurrent_requests)
 
