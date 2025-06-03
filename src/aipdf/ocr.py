@@ -6,8 +6,8 @@ import logging
 import os
 
 import fitz
+from httpx import Timeout
 from openai import OpenAI, AsyncOpenAI, AzureOpenAI, AsyncAzureOpenAI
-
 
 DEFAULT_PROMPT = """
 Extract the full markdown text from the given image, following these guidelines:
@@ -22,7 +22,7 @@ DEFAULT_DRAWING_AREA_THRESHOLD = 0.1  # 10% of the page area
 DEFAULT_GAP_THRESHOLD = 10  # 10 points
 
 
-def get_openai_client(api_key=None, base_url='https://api.openai.com/v1', is_async=False, **kwargs):
+def get_openai_client(api_key=None, base_url='https://api.openai.com/v1', is_async=False, timeout=Timeout(None), **kwargs):
     """
     Get an OpenAI client instance.
 
@@ -30,6 +30,7 @@ def get_openai_client(api_key=None, base_url='https://api.openai.com/v1', is_asy
         api_key (str): The OpenAI API key.
         base_url (str): The base URL for the OpenAI API.
         is_async (bool): Whether to create an asynchronous client.
+        timeout (Timeout): Timeout for the OpenAI API calls.
         **kwargs: Additional keyword arguments.
 
     Returns:
@@ -40,7 +41,7 @@ def get_openai_client(api_key=None, base_url='https://api.openai.com/v1', is_asy
 
     if not api_key:
         raise ValueError("API key is required. Please provide it as an argument or set the AIPDF_API_KEY environment variable.")
-    
+
     if base_url and "openai.azure.com" in base_url:
         if is_async:
             return AsyncAzureOpenAI(api_key=api_key, azure_endpoint=base_url, **kwargs)
@@ -48,24 +49,24 @@ def get_openai_client(api_key=None, base_url='https://api.openai.com/v1', is_asy
             return AzureOpenAI(api_key=api_key, azure_endpoint=base_url, **kwargs)
 
     if is_async:
-        return AsyncOpenAI(api_key=api_key, base_url=base_url, **kwargs)
+        return AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout, **kwargs)
     else:
-        return OpenAI(api_key=api_key, base_url=base_url, **kwargs)
+        return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout, **kwargs)
 
 
 def _prepare_image_messages(file_object, prompt):
     """
     Helper function to prepare messages for OpenAI API call.
-    
+
     Args:
         file_object (io.BytesIO): The image file object.
         prompt (str): The prompt to send to the API.
-        
+
     Returns:
         list: The messages list for the API call.
     """
     base64_image = base64.b64encode(file_object.read()).decode('utf-8')
-    
+
     return [
         {
             "role": "user",
@@ -88,10 +89,10 @@ def _prepare_image_messages(file_object, prompt):
 def _validate_and_extract_content(response):
     """
     Helper function to validate OpenAI API response and extract content.
-    
+
     Args:
         response: The response object from OpenAI API.
-        
+
     Returns:
         str or None: The extracted content, or None if validation fails.
     """
@@ -99,31 +100,31 @@ def _validate_and_extract_content(response):
     if not response:
         logging.error(f"Received empty response from OpenAI API: {response}")
         return None
-        
+
     if not hasattr(response, 'choices') or not response.choices:
         logging.error(f"Response does not contain choices or choices is empty. Response: {response}")
         return None
-        
+
     if len(response.choices) == 0:
         logging.error(f"Response choices list is empty. Response: {response}")
         return None
-        
+
     first_choice = response.choices[0]
     if not hasattr(first_choice, 'message') or not first_choice.message:
         logging.error(f"Response choice does not contain message. First choice: {first_choice}")
         return None
-        
+
     if not hasattr(first_choice.message, 'content'):
         logging.error(f"Response message does not contain content. Message: {first_choice.message}")
         return None
-        
+
     markdown_content = first_choice.message.content
-    
+
     # Additional check for empty or None content
     if not markdown_content:
         logging.warning(f"Response content is empty or None. Content: {repr(markdown_content)}")
         return None
-        
+
     return markdown_content
 
 
@@ -152,7 +153,7 @@ def image_to_markdown(file_object, client, model="gpt-4o",  prompt=DEFAULT_PROMP
         )
 
         markdown_content = _validate_and_extract_content(response)
-        
+
         if markdown_content:
             logging.debug("Page processed successfully")
             return markdown_content
@@ -163,7 +164,7 @@ def image_to_markdown(file_object, client, model="gpt-4o",  prompt=DEFAULT_PROMP
     except Exception as e:
         logging.error(f"An error occurred while processing the image: {e}")
         return None
-    
+
 
 async def image_to_markdown_async(file_object, client, model="gpt-4o", prompt=DEFAULT_PROMPT):
     """
@@ -190,7 +191,7 @@ async def image_to_markdown_async(file_object, client, model="gpt-4o", prompt=DE
         )
 
         markdown_content = _validate_and_extract_content(response)
-        
+
         if markdown_content:
             logging.debug("Page processed successfully")
             return markdown_content
@@ -339,16 +340,17 @@ def process_pages(pdf_file, pages_list=None, use_llm_for_all=False, drawing_area
 
 
 def ocr(
-    pdf_file, 
+    pdf_file,
     api_key = None,
-    model="gpt-4o", 
-    base_url='https://api.openai.com/v1', 
-    prompt=DEFAULT_PROMPT, 
+    model="gpt-4o",
+    base_url='https://api.openai.com/v1',
+    prompt=DEFAULT_PROMPT,
     pages_list=None,
     use_llm_for_all=False,
     drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD,
     gap_threshold=DEFAULT_GAP_THRESHOLD,
     logging_level=logging.INFO,
+    timeout=Timeout(None),
     **kwargs
     ):
     """
@@ -367,6 +369,7 @@ def ocr(
         drawing_area_threshold (float): Minimum fraction of page area that drawings must cover to be visual.
         gap_threshold (int): The threshold for vertical gaps between text blocks.
         logging_level (int): The logging level. Defaults to logging.INFO.
+        timeout (Timeout): Timeout for the OpenAI API calls.
         **kwargs: Additional keyword arguments.
 
     Returns:
@@ -375,8 +378,8 @@ def ocr(
     # Set up logging
     logging.basicConfig(level=logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    client = get_openai_client(api_key=api_key, base_url=base_url, **kwargs)
-    
+    client = get_openai_client(api_key=api_key, base_url=base_url, timeout=timeout, **kwargs)
+
     # Identify the maximum number of workers for parallel processing
     max_workers = os.getenv("AIPDF_MAX_CONCURRENT_REQUESTS", None)
     if max_workers:
@@ -400,9 +403,9 @@ def ocr(
         # Process each image file in parallel
         with executor:
             # Submit tasks for each image file
-            future_to_page = {executor.submit(image_to_markdown, img_file, client, model, prompt): page_num 
+            future_to_page = {executor.submit(image_to_markdown, img_file, client, model, prompt): page_num
                             for page_num, img_file in image_files.items()}
-            
+
             # Collect results as they complete
             for future in concurrent.futures.as_completed(future_to_page):
                 page_num = future_to_page[future]
@@ -420,7 +423,7 @@ def ocr(
 
 
 async def ocr_async(
-    pdf_file, 
+    pdf_file,
     api_key = None,
     model="gpt-4o",
     base_url='https://api.openai.com/v1',
@@ -430,6 +433,7 @@ async def ocr_async(
     drawing_area_threshold=DEFAULT_DRAWING_AREA_THRESHOLD,
     gap_threshold=DEFAULT_GAP_THRESHOLD,
     logging_level=logging.INFO,
+    timeout=Timeout(None),
     **kwargs
     ):
     """
@@ -448,6 +452,7 @@ async def ocr_async(
         drawing_area_threshold (float): Minimum fraction of page area that drawings must cover to be visual.
         gap_threshold (int): The threshold for vertical gaps between text blocks.
         logging_level (int): The logging level. Defaults to logging.INFO.
+        timeout (Timeout): Timeout for the OpenAI API calls.
         **kwargs: Additional keyword arguments.
 
     Returns:
@@ -456,7 +461,7 @@ async def ocr_async(
     # Set up logging
     logging.basicConfig(level=logging_level, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    client = get_openai_client(api_key=api_key, base_url=base_url, is_async=True, **kwargs)
+    client = get_openai_client(api_key=api_key, base_url=base_url, is_async=True, timeout=timeout, **kwargs)
 
     # Set up a semaphore for limiting concurrent requests if specified
     semaphore = None
