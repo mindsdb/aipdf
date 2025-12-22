@@ -19,7 +19,7 @@ classifiers = [
 ]
 dependencies = [
     "PyMuPDF==1.25.2",
-    "openai<2.0.0,>=1.58.1",
+    "openai<3.0.0,>=2.0.0",
 ]
 dynamic = ["version"]
 
